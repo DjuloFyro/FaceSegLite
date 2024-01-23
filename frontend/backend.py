@@ -36,7 +36,7 @@ def upload_file():
 
     # Use OpenCV to read the image and get its shape
     image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_UNCHANGED)
-    
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     # Sauvegardez les dimensions originales
     original_dimensions = image.shape[:2]
 
@@ -76,6 +76,7 @@ def upload_file2():
 
     # Use OpenCV to read the image and get its shape
     image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_UNCHANGED)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = transforms.ToTensor()(image)
     eval_transform = get_transform(train=False)
 
