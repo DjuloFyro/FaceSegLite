@@ -8,19 +8,19 @@ import numpy as np
 
 st.title("Live Webcam Tracking")
 
-backend_url = "http://127.0.0.1:5000"
 
 def log(message):
     st.info(message)
 
 def video_frame_callback(frame):
+    if backend_url == "":
+        return frame
     img = frame.to_ndarray(format="bgr24")
     _, img_encoded = cv2.imencode('.jpg', img)
 
     files = {'file': ('image.jpg', img_encoded.tobytes(), 'image/jpeg', {'Expires': '0'})}
 
-    response = requests.post(f"{backend_url}/upload", files=files)
-
+    response = requests.post(backend_url, files=files)
 
     if response.status_code == 200:
 
@@ -33,3 +33,14 @@ def video_frame_callback(frame):
         return None
 
 webrtc_streamer(key="example", video_frame_callback=video_frame_callback)
+
+modele = st.radio(
+    "Sélection du modèle",
+    ["***Aucun modèle***", "***Bounding box et mask***", "***Mask***"])
+
+if modele == '***Aucun modèle***':
+    backend_url = ""
+elif modele == '***Bounding box et mask***':
+    backend_url = "http://127.0.0.1:5000/upload2"
+elif modele == '***Mask***':
+    backend_url = "http://127.0.0.1:5000/upload"
