@@ -41,6 +41,6 @@ modele = st.radio(
 if modele == '***Aucun modèle***':
     backend_url = ""
 elif modele == '***Bounding box et mask***':
-    backend_url = "http://127.0.0.1:5000/upload2"
+    backend_url = "http://127.0.0.1:5000/upload_mask_42m"
 elif modele == '***Mask***':
-    backend_url = "http://127.0.0.1:5000/upload"
+    backend_url = "http://127.0.0.1:5000/upload_mask_21m"

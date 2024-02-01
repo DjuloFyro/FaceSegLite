@@ -1,6 +1,12 @@
 import torch
 import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
+import cv2
+import numpy as np
+from PIL import Image
+from io import BytesIO
+from torchvision.utils import draw_segmentation_masks
+from torchvision.transforms import v2 as T
 
 class FaceModel(pl.LightningModule):
 
@@ -121,3 +127,56 @@ class FaceModel(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.0001)
+
+
+def eval_transform(image):
+  target_size = (256, 256)
+  transforms = T.Compose([T.ToImage(), T.ToDtype(torch.float32, scale=True), T.Resize(target_size, antialias=True)])
+  return transforms(image)
+
+def predict_with_fpn_resnet34(buffer):
+    """
+    Predict the mask with the fpn_resnet34 model
+    
+    Args:
+        buffer (bytes): The image bytes
+    
+    Returns:
+        bytes: The image bytes with the mask
+    """
+
+    # Load the model
+    loaded_model = FaceModel("FPN", "resnet34", in_channels=3, out_classes=1)
+    loaded_model.load_state_dict(torch.load('../models/FPN_trained_model_v3.pth', map_location=torch.device('cpu')))
+    loaded_model.to("cpu")
+
+    # Use OpenCV to read the image and get its shape
+    image = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # Sauvegardez les dimensions originales
+    original_dimensions = image.shape[:2]
+
+    image = eval_transform(image)
+
+    loaded_model.eval()
+    with torch.no_grad():
+        predictions = loaded_model(image)
+
+    image = (255.0 * (image - image.min()) / (image.max() - image.min())).to(torch.uint8)
+    image = image[:3, ...]
+
+    pr_masks = predictions.sigmoid()
+    masks = (pr_masks > 0.3).squeeze(1)
+
+    output_image = draw_segmentation_masks(image, masks, alpha=0.5, colors="blue")
+
+    output_image = cv2.resize(output_image.permute(1, 2, 0).numpy(), (original_dimensions[1], original_dimensions[0]))
+
+    pil_image = Image.fromarray(output_image)
+
+    image_buffer = BytesIO()
+    pil_image.save(image_buffer, format='JPEG')
+
+    img_encoded = image_buffer.getvalue()
+
+    return img_encoded
