@@ -193,7 +193,7 @@ def eval_transform(image):
   transforms = T.Compose([T.ToImage(), T.ToDtype(torch.float32, scale=True), T.Resize(target_size, antialias=True)])
   return transforms(image)
 
-def predict_with_fpn_resnet34(buffer):
+def predict_with_small_unet(buffer):
     """
     Predict the mask with the fpn_resnet34 model
     
