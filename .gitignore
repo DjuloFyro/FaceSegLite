@@ -1,0 +1,6 @@
+models/mask_rcnn_trained_model.pth
+deep_nn_env
+.vscode
+.idea
+data/
+**/__pycache__/
