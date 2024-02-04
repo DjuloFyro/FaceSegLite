@@ -36,6 +36,15 @@ def get_model_instance_segmentation(num_classes):
 
     return model
 
+def load_model():
+    device = ("cuda" if torch.cuda.is_available() else "cpu")
+    model = get_model_instance_segmentation(2)
+    model.load_state_dict(torch.load('../models/mask_rcnn_trained_model.pth', map_location=torch.device(device)))
+    model.eval()
+    model.to(device)
+
+mask_rcnn_model = load_model()
+
 def predict_with_mask_rcnn_resnet50(buffer):
     """
     Predict the mask with the with_mask_rcnn_resnet50 model
@@ -46,10 +55,6 @@ def predict_with_mask_rcnn_resnet50(buffer):
     Returns:
         bytes: The image bytes with the mask
     """
-    # Load the model
-    loaded_model = get_model_instance_segmentation(2)
-    loaded_model.load_state_dict(torch.load('../models/trained_model.pth', map_location=torch.device('cpu')))
-    loaded_model.to("cpu")
 
     # Use OpenCV to read the image and get its shape
     image = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
@@ -57,11 +62,10 @@ def predict_with_mask_rcnn_resnet50(buffer):
     image = transforms.ToTensor()(image)
     eval_transform = get_transform(train=False)
 
-    loaded_model.eval()
     with torch.no_grad():
         x = eval_transform(image)
         x = x[:3, ...]
-        predictions = loaded_model([x, ])
+        predictions = mask_rcnn_model([x, ])
         pred = predictions[0]
 
     image = (255.0 * (image - image.min()) / (image.max() - image.min())).to(torch.uint8)

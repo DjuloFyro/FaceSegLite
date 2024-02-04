@@ -36,13 +36,23 @@ webrtc_streamer(key="example", video_frame_callback=video_frame_callback)
 
 modele = st.radio(
     "Sélection du modèle",
-    ["***Aucun modèle***", "***Bounding box et mask***", "***Small_UNet***", "***UNet***"])
+    ["***Aucun modèle***", 
+     "***Bounding boxes et masks (Mask R-CNN)***", 
+     "***Small Unet only***", 
+     "***Small Unet pretained***", 
+     "***Small Unet and YOLO***", 
+     "***Medium Unet***"]
+     )
 
 if modele == '***Aucun modèle***':
     backend_url = ""
-elif modele == '***Bounding box et mask***':
-    backend_url = "http://127.0.0.1:5000/upload_mask_42m"
-elif modele == '***Small_UNet***':
-    backend_url = "http://127.0.0.1:5000/upload_small_unet"
-elif modele == '***UNet***':
-    backend_url = "http://127.0.0.1:5000/upload_mask_unet"
+elif modele == '***Bounding boxes et masks (Mask R-CNN***':
+    backend_url = "http://127.0.0.1:5000/upload_mask_rcnn"
+elif modele == '***Small Unet only***':
+    backend_url = "http://127.0.0.1:5000/upload_small_unet_only"
+elif modele == '***Small Unet pretained***':
+    backend_url = "http://127.0.0.1:5000/upload_small_unet_pretained"
+elif modele == '***Small Unet and YOLO***':
+    backend_url = "http://127.0.0.1:5000/upload_small_unet_and_yolo"
+elif modele == '***Medium Unet***':
+    backend_url = "http://127.0.0.1:5000/upload_medium_unet"

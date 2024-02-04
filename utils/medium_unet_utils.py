@@ -7,7 +7,7 @@ from torch.nn import ReLU
 from torchvision.transforms import CenterCrop
 from torch.nn import functional as F
 from torchvision import transforms
-from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
+from torchvision.utils import draw_segmentation_masks
 import torch
 
 import cv2
@@ -113,7 +113,7 @@ class UNet(Module):
       return map
     
 
-def predict_with_unet(buffer):
+def predict_with_medium_unet(buffer):
     """
     Predict the mask with the with_mask_rcnn_resnet50 model
     
