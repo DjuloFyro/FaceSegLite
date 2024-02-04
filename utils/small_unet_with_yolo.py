@@ -266,7 +266,7 @@ def display_image_with_masks_only(image, masks_list, boxes_list):
         mask_colored = np.zeros((ymax-ymin, xmax-xmin, 3), dtype=np.uint8)
 
         # Appliquer la couleur unique au masque
-        mask_colored[mask_resized > 0] = [0, 0, 1]  # Blue color
+        mask_colored[mask_resized > 0] = [0, 0, 255]  # Blue color
 
         # Convertir le masque coloré en image PIL pour le superposer
         overlay_mask = Image.fromarray(mask_colored, 'RGB')
