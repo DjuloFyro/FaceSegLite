@@ -14,3 +14,4 @@ ipykernel==6.29.0
 segmentation-models-pytorch==0.3.3
 pytorch-lightning==1.9.5
 torchtext==0.6.0
+transformers

@@ -193,6 +193,111 @@ def eval_transform(image):
   transforms = T.Compose([T.ToImage(), T.ToDtype(torch.float32, scale=True), T.Resize(target_size, antialias=True)])
   return transforms(image)
 
+
+from PIL import Image
+import torch
+import matplotlib.patches as patches
+
+from transformers import YolosForObjectDetection, YolosImageProcessor
+import numpy as np
+import cv2
+import time
+
+
+IMG_HEIGHT, IMG_WIDTH = 256, 256
+
+# Fonction pour charger les modèles (à adapter selon vos chemins et configurations)
+def load_models():
+    object_detection_model = YolosForObjectDetection.from_pretrained('hustvl/yolos-tiny')
+    image_processor = YolosImageProcessor.from_pretrained("hustvl/yolos-tiny")
+    # Assurez-vous que le modèle U-Net est correctement chargé ici
+    unet_model = FaceModel(in_channels=3, out_classes=1)
+    unet_model.load_state_dict(torch.load('../models/unet_model_small_v4.pth', map_location=torch.device('cpu')))
+    unet_model.eval()
+    return object_detection_model, image_processor, unet_model
+
+# Fonction pour générer et stocker les masques des ROI
+def generate_roi_masks(image, object_detection_model, image_processor, unet_model):
+    masks_list = []
+    boxes_list = []
+    #image = Image.open(image_path)
+    #image = image.convert('RGB')
+
+    # Détection des objets avec YOLOS
+    inputs = image_processor(images=image, return_tensors="pt")
+    outputs = object_detection_model(**inputs)
+    
+    target_sizes = torch.tensor([image.size[::-1]])
+    results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[0]
+    class_names = object_detection_model.config.id2label
+   
+    for box, label in zip(results['boxes'], results['labels']):
+      if class_names[label.item()] == 'person':
+        xmin, ymin, xmax, ymax = box.detach().numpy().tolist()
+        roi = image.crop((xmin, ymin, xmax, ymax))
+
+        # Convertir PIL Image en Tensor PyTorch pour U-Net
+        transform = T.Compose([
+            T.ToImage(),
+            T.ToDtype(torch.float32, scale=True),
+            T.Resize((IMG_HEIGHT, IMG_WIDTH), antialias=True)
+            ])
+        roi_tensor = transform(roi).unsqueeze(0)  # Ajouter une dimension de batch
+
+        # Prédiction du masque avec U-Net
+        with torch.no_grad():
+            mask_pred = unet_model(roi_tensor)
+        mask_pred = mask_pred.squeeze().cpu().numpy()  # Enlever la dimension de batch et convertir en numpy
+        mask_pred = (mask_pred > 0.5).astype(np.uint8)  # Seuillage pour obtenir un masque binaire
+
+        # Stocker le masque et les coordonnées de la bounding box
+        masks_list.append(mask_pred)
+        boxes_list.append((xmin, ymin, xmax, ymax))
+    
+    return masks_list, boxes_list
+
+
+def display_image_with_masks_only(image, masks_list, boxes_list):
+    # Charger l'image originale
+    #image = Image.open(image_path)
+    #image_np = np.array(image.convert('RGB'))
+
+    # Créer une figure pour l'affichage
+    #fig, ax = plt.subplots(figsize=(12, 8))
+    #ax.imshow(image_np)
+
+    for mask, (xmin, ymin, xmax, ymax) in zip(masks_list, boxes_list):
+        # Ajuster les coordonnées pour qu'elles soient entières
+        xmin, ymin, xmax, ymax = map(int, [xmin, ymin, xmax, ymax])
+
+        # Redimensionner le masque pour correspondre à la bounding box
+        mask_resized = cv2.resize(mask, (xmax-xmin, ymax-ymin))
+        mask_colored = np.zeros((ymax-ymin, xmax-xmin, 3), dtype=np.uint8)
+
+        # Appliquer la couleur unique au masque
+        mask_colored[mask_resized > 0] = np.random.rand(3,) 
+
+        # Convertir le masque coloré en image PIL pour le superposer
+        overlay_mask = Image.fromarray(mask_colored, 'RGB')
+        overlay_image = Image.fromarray(image[ymin:ymax, xmin:xmax])
+
+        # Assurer que le masque et l'image ont la même taille avant la fusion
+        if overlay_image.size != overlay_mask.size:
+            overlay_mask = overlay_mask.resize(overlay_image.size, Image.ANTIALIAS)
+
+        # Fusionner l'image et le masque uniquement là où le masque est présent
+        overlay_image_np = np.array(overlay_image)
+        overlay_image_np[mask_resized > 0] = np.array(overlay_mask)[mask_resized > 0]
+        blended = Image.fromarray(overlay_image_np)
+
+        # Mélanger l'image originale et le masque avec une transparence de 0.5
+        image[ymin:ymax, xmin:xmax] = np.array(Image.blend(Image.fromarray(image[ymin:ymax, xmin:xmax]), blended, alpha=0.5))
+
+    return image
+
+
+
+
 def predict_with_small_unet(buffer):
     """
     Predict the mask with the fpn_resnet34 model
@@ -203,35 +308,44 @@ def predict_with_small_unet(buffer):
     Returns:
         bytes: The image bytes with the mask
     """
+    object_detection_model, image_processor, unet_model = load_models()
 
-    # Load the model
-    loaded_model = FaceModel(in_channels=3, out_classes=1)
-    loaded_model.load_state_dict(torch.load('../models/unet_model_small_v4.pth', map_location=torch.device('cpu')))
-    loaded_model.to("cpu")
-
-    # Use OpenCV to read the image and get its shape
+    
     image = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    # Sauvegardez les dimensions originales
-    original_dimensions = image.shape[:2]
+    pil_img = Image.fromarray(image)
 
-    image = eval_transform(image)
+    masks_list, boxes_list = generate_roi_masks(pil_img, object_detection_model, image_processor, unet_model)
+    image_with_mask = display_image_with_masks_only(image, masks_list, boxes_list)
 
-    loaded_model.eval()
-    with torch.no_grad():
-        predictions = loaded_model(image)
+    ## Load the model
+    #loaded_model = FaceModel(in_channels=3, out_classes=1)
+    #loaded_model.load_state_dict(torch.load('../models/unet_model_small_v4.pth', map_location=torch.device('cpu')))
+    #loaded_model.to("cpu")
+#
+    ## Use OpenCV to read the image and get its shape
+    #image = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
+    #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    ## Sauvegardez les dimensions originales
+    #original_dimensions = image.shape[:2]
+#
+    #image = eval_transform(image)
+#
+    #loaded_model.eval()
+    #with torch.no_grad():
+    #    predictions = loaded_model(image)
+#
+    #image = (255.0 * (image - image.min()) / (image.max() - image.min())).to(torch.uint8)
+    #image = image[:3, ...]
+#
+    #pr_masks = predictions.sigmoid()
+    #masks = (pr_masks > 0.5).squeeze(1)
+#
+    #output_image = draw_segmentation_masks(image, masks, alpha=0.5, colors="blue")
+#
+    #output_image = cv2.resize(output_image.permute(1, 2, 0).numpy(), (original_dimensions[1], original_dimensions[0]))
 
-    image = (255.0 * (image - image.min()) / (image.max() - image.min())).to(torch.uint8)
-    image = image[:3, ...]
-
-    pr_masks = predictions.sigmoid()
-    masks = (pr_masks > 0.5).squeeze(1)
-
-    output_image = draw_segmentation_masks(image, masks, alpha=0.5, colors="blue")
-
-    output_image = cv2.resize(output_image.permute(1, 2, 0).numpy(), (original_dimensions[1], original_dimensions[0]))
-
-    pil_image = Image.fromarray(output_image)
+    pil_image = Image.fromarray(image_with_mask)
 
     image_buffer = BytesIO()
     pil_image.save(image_buffer, format='JPEG')
