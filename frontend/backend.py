@@ -8,17 +8,6 @@ from unet_utils import predict_with_unet
 
 app = Flask(__name__)
 
-def dice_coefficient(y_true, y_pred):
-    smooth = 1e-6
-    y_true_f = tf.cast(tf.reshape(y_true, [-1]), tf.float32)
-    y_pred_f = tf.cast(tf.reshape(y_pred, [-1]), tf.float32)
-    intersection = tf.reduce_sum(y_true_f * y_pred_f)
-    score = (2. * intersection + smooth) / (tf.reduce_sum(y_true_f) + tf.reduce_sum(y_pred_f) + smooth)
-    return score
-
-def dice_loss(y_true, y_pred):
-    return 1 - dice_coefficient(y_true, y_pred)
-
 
 @app.route('/upload_mask_42m', methods=['POST'])
 def upload_mask_from_maskrcnn_resnet50():
