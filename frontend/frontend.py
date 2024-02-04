@@ -36,7 +36,7 @@ webrtc_streamer(key="example", video_frame_callback=video_frame_callback)
 
 modele = st.radio(
     "Sélection du modèle",
-    ["***Aucun modèle***", "***Bounding box et mask***", "***Mask***", "***UNet***"])
+    ["***Aucun modèle***", "***Bounding box et mask***", "***Mask***", "***UNet***", "***Tensorflow_UNET***"])
 
 if modele == '***Aucun modèle***':
     backend_url = ""

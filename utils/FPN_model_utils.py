@@ -1,6 +1,8 @@
 import torch
 import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
+import torch.nn as nn
+import torch.nn.functional as F
 import cv2
 import numpy as np
 from PIL import Image
@@ -8,18 +10,75 @@ from io import BytesIO
 from torchvision.utils import draw_segmentation_masks
 from torchvision.transforms import v2 as T
 
+
+def conv_block(in_channels, out_channels):
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, 3, padding=1),
+        nn.ReLU(inplace=True),
+        nn.Conv2d(out_channels, out_channels, 3, padding=1),
+        nn.BatchNorm2d(out_channels),
+        nn.ReLU(inplace=True)
+    )
+
+class UNet(nn.Module):
+    def __init__(self, num_classes):
+        super(UNet, self).__init__()
+        
+        self.block1 = conv_block(3, 16)
+        self.block2 = conv_block(16, 32)
+        self.block3 = conv_block(32, 64)
+        self.block4 = conv_block(64, 128)
+        self.block5 = conv_block(128, 256)
+        
+        self.upconv4 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.block6 = conv_block(256, 128)
+        self.upconv3 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.block7 = conv_block(128, 64)
+        self.upconv2 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
+        self.block8 = conv_block(64, 32)
+        self.upconv1 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
+        self.block9 = conv_block(32, 16)
+        
+        self.output = nn.Conv2d(16, num_classes, kernel_size=1)
+        
+    def forward(self, x):
+        block1 = self.block1(x)
+        pool1 = F.max_pool2d(block1, 2)
+        block2 = self.block2(pool1)
+        pool2 = F.max_pool2d(block2, 2)
+        block3 = self.block3(pool2)
+        pool3 = F.max_pool2d(block3, 2)
+        block4 = self.block4(pool3)
+        pool4 = F.max_pool2d(block4, 2)
+        block5 = self.block5(pool4)
+        
+        up6 = self.upconv4(block5)
+        concat6 = torch.cat([up6, block4], dim=1)
+        block6 = self.block6(concat6)
+        up7 = self.upconv3(block6)
+        concat7 = torch.cat([up7, block3], dim=1)
+        block7 = self.block7(concat7)
+        up8 = self.upconv2(block7)
+        concat8 = torch.cat([up8, block2], dim=1)
+        block8 = self.block8(concat8)
+        up9 = self.upconv1(block8)
+        concat9 = torch.cat([up9, block1], dim=1)
+        block9 = self.block9(concat9)
+        
+        out = self.output(block9)
+        
+        return out
+
+
 class FaceModel(pl.LightningModule):
 
-    def __init__(self, arch, encoder_name, in_channels, out_classes, **kwargs):
+    def __init__(self, in_channels, out_classes, **kwargs):
         super().__init__()
-        self.model = smp.create_model(
-            arch, encoder_name=encoder_name, in_channels=in_channels, classes=out_classes, **kwargs
-        )
+        self.model = UNet(num_classes=out_classes)
 
         # preprocessing parameteres for image
-        params = smp.encoders.get_preprocessing_params(encoder_name)
-        self.register_buffer("std", torch.tensor(params["std"]).view(1, 3, 1, 1))
-        self.register_buffer("mean", torch.tensor(params["mean"]).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer("mean", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
         # for image segmentation dice loss could be the best first choice
         self.loss_fn = smp.losses.DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
@@ -146,8 +205,8 @@ def predict_with_fpn_resnet34(buffer):
     """
 
     # Load the model
-    loaded_model = FaceModel("FPN", "resnet34", in_channels=3, out_classes=1)
-    loaded_model.load_state_dict(torch.load('../models/FPN_trained_model_v3.pth', map_location=torch.device('cpu')))
+    loaded_model = FaceModel(in_channels=3, out_classes=1)
+    loaded_model.load_state_dict(torch.load('../models/unet_model_small_v4.pth', map_location=torch.device('cpu')))
     loaded_model.to("cpu")
 
     # Use OpenCV to read the image and get its shape
@@ -166,7 +225,7 @@ def predict_with_fpn_resnet34(buffer):
     image = image[:3, ...]
 
     pr_masks = predictions.sigmoid()
-    masks = (pr_masks > 0.3).squeeze(1)
+    masks = (pr_masks > 0.5).squeeze(1)
 
     output_image = draw_segmentation_masks(image, masks, alpha=0.5, colors="blue")
 
