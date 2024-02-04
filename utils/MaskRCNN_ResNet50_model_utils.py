@@ -42,6 +42,7 @@ def load_model():
     model.load_state_dict(torch.load('../models/mask_rcnn_trained_model.pth', map_location=torch.device(device)))
     model.eval()
     model.to(device)
+    return model
 
 mask_rcnn_model = load_model()
 

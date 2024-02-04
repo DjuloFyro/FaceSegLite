@@ -45,7 +45,7 @@ modele = st.radio(
 
 if modele == '***Aucun modèle***':
     backend_url = ""
-elif modele == '***Bounding boxes et masks (Mask R-CNN***':
+elif modele == '***Bounding boxes et masks (Mask R-CNN)***':
     backend_url = "http://127.0.0.1:5000/upload_mask_rcnn"
 elif modele == '***Small Unet only***':
     backend_url = "http://127.0.0.1:5000/upload_small_unet_only"
