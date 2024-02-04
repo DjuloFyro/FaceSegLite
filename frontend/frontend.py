@@ -40,8 +40,7 @@ modele = st.radio(
      "***Bounding boxes et masks (Mask R-CNN)***", 
      "***Small Unet only***", 
      "***Small Unet pretained***", 
-     "***Small Unet and YOLO***", 
-     "***Medium Unet***"]
+     "***Small Unet and YOLO***"]
      )
 
 if modele == '***Aucun modèle***':
@@ -54,5 +53,3 @@ elif modele == '***Small Unet pretained***':
     backend_url = "http://127.0.0.1:5000/upload_small_unet_pretained"
 elif modele == '***Small Unet and YOLO***':
     backend_url = "http://127.0.0.1:5000/upload_small_unet_and_yolo"
-elif modele == '***Medium Unet***':
-    backend_url = "http://127.0.0.1:5000/upload_medium_unet"

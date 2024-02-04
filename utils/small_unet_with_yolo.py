@@ -12,11 +12,11 @@ from torchvision.transforms import v2 as T
 from PIL import Image
 import torch
 import matplotlib.patches as patches
+from torchvision.utils import draw_bounding_boxes
 
 from transformers import YolosForObjectDetection, YolosImageProcessor
 import numpy as np
 import cv2
-import time
 
 
 def conv_block(in_channels, out_channels):
@@ -203,13 +203,17 @@ def eval_transform(image):
 
 IMG_HEIGHT, IMG_WIDTH = 256, 256
 
+from small_unet_pretained import FaceModel
+
 # Fonction pour charger les modèles (à adapter selon vos chemins et configurations)
 def load_models():
     object_detection_model = YolosForObjectDetection.from_pretrained('hustvl/yolos-tiny')
     image_processor = YolosImageProcessor.from_pretrained("hustvl/yolos-tiny")
     # Assurez-vous que le modèle U-Net est correctement chargé ici
-    unet_model = FaceModel(in_channels=3, out_classes=1)
-    unet_model.load_state_dict(torch.load('../models/unet_model_small_v4.pth', map_location=torch.device('cpu')))
+    unet_model = FaceModel("FPN", "timm-mobilenetv3_small_minimal_100", in_channels=3, out_classes=1)
+    unet_model.load_state_dict(torch.load('../models/fpn_trained_model_small_v1.pth', map_location=torch.device('cpu')))
+    #unet_model = FaceModel(in_channels=3, out_classes=1)
+    #unet_model.load_state_dict(torch.load('../models/unet_model_small_v4.pth', map_location=torch.device('cpu')))
     unet_model.eval()
     return object_detection_model, image_processor, unet_model
 
@@ -217,9 +221,7 @@ def load_models():
 def generate_roi_masks(image, object_detection_model, image_processor, unet_model):
     masks_list = []
     boxes_list = []
-    #image = Image.open(image_path)
-    #image = image.convert('RGB')
-
+  
     # Détection des objets avec YOLOS
     inputs = image_processor(images=image, return_tensors="pt")
     outputs = object_detection_model(**inputs)
@@ -255,14 +257,6 @@ def generate_roi_masks(image, object_detection_model, image_processor, unet_mode
 
 
 def display_image_with_masks_only(image, masks_list, boxes_list):
-    # Charger l'image originale
-    #image = Image.open(image_path)
-    #image_np = np.array(image.convert('RGB'))
-
-    # Créer une figure pour l'affichage
-    #fig, ax = plt.subplots(figsize=(12, 8))
-    #ax.imshow(image_np)
-
     for mask, (xmin, ymin, xmax, ymax) in zip(masks_list, boxes_list):
         # Ajuster les coordonnées pour qu'elles soient entières
         xmin, ymin, xmax, ymax = map(int, [xmin, ymin, xmax, ymax])
@@ -272,7 +266,7 @@ def display_image_with_masks_only(image, masks_list, boxes_list):
         mask_colored = np.zeros((ymax-ymin, xmax-xmin, 3), dtype=np.uint8)
 
         # Appliquer la couleur unique au masque
-        mask_colored[mask_resized > 0] = np.random.rand(3,) 
+        mask_colored[mask_resized > 0] = [0, 0, 1]  # Blue color
 
         # Convertir le masque coloré en image PIL pour le superposer
         overlay_mask = Image.fromarray(mask_colored, 'RGB')
@@ -286,14 +280,13 @@ def display_image_with_masks_only(image, masks_list, boxes_list):
         overlay_image_np = np.array(overlay_image)
         overlay_image_np[mask_resized > 0] = np.array(overlay_mask)[mask_resized > 0]
         blended = Image.fromarray(overlay_image_np)
-
+        box_tensor = torch.tensor(boxes_list)
+        image = draw_bounding_boxes(torch.from_numpy(image).permute(2, 0, 1).to(torch.uint8), box_tensor, colors="red")
+        image = image.permute(1, 2, 0).numpy()
         # Mélanger l'image originale et le masque avec une transparence de 0.5
         image[ymin:ymax, xmin:xmax] = np.array(Image.blend(Image.fromarray(image[ymin:ymax, xmin:xmax]), blended, alpha=0.5))
 
     return image
-
-
-
 
 def predict_with_small_unet_and_yolo(buffer):
     """
